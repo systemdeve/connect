@@ -1,0 +1,742 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Random Connect</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js"></script>
+<style>
+  :root {
+    --bg: #0b0f14;
+    --panel: #121821;
+    --panel-2: #171f2b;
+    --accent: #4fd1c5;
+    --accent-2: #7c5cff;
+    --text: #e8edf2;
+    --text-dim: #8a97a8;
+    --danger: #ff5c72;
+    --border: #232c3a;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    height: 100%;
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  }
+  body {
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  .screen {
+    min-height: 100%;
+    display: none;
+    flex-direction: column;
+    align-items: center;
+  }
+  .screen.active { display: flex; }
+
+  /* ---------- Age gate ---------- */
+  #ageGate {
+    justify-content: center;
+    padding: 24px;
+  }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 32px;
+    max-width: 420px;
+    width: 100%;
+  }
+  .card h1 {
+    font-size: 1.4rem;
+    margin: 0 0 8px;
+  }
+  .card p {
+    color: var(--text-dim);
+    font-size: 0.92rem;
+    line-height: 1.5;
+  }
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 20px;
+  }
+  .logo-mark {
+    width: 34px; height: 34px;
+    border-radius: 10px;
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    flex-shrink: 0;
+  }
+  .logo-text {
+    font-weight: 700;
+    font-size: 1.15rem;
+    letter-spacing: -0.02em;
+  }
+  label { display: block; font-size: 0.85rem; color: var(--text-dim); margin: 16px 0 6px; }
+  input[type="date"], select {
+    width: 100%;
+    padding: 11px 12px;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    color: var(--text);
+    font-size: 0.95rem;
+  }
+  .checkbox-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    margin-top: 18px;
+    font-size: 0.85rem;
+    color: var(--text-dim);
+  }
+  .checkbox-row input { margin-top: 3px; }
+  .btn {
+    display: block;
+    width: 100%;
+    padding: 13px;
+    margin-top: 20px;
+    border: none;
+    border-radius: 10px;
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    color: #0b0f14;
+    font-weight: 700;
+    font-size: 0.95rem;
+    cursor: pointer;
+    transition: opacity 0.15s;
+  }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn:not(:disabled):hover { opacity: 0.9; }
+  .btn-secondary {
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+  }
+  .error-text { color: var(--danger); font-size: 0.82rem; margin-top: 10px; min-height: 1em; }
+
+  /* ---------- Landing ---------- */
+  #landing { justify-content: center; padding: 24px; }
+  .mode-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-top: 18px;
+  }
+  .mode-btn {
+    padding: 18px 10px;
+    background: var(--panel-2);
+    border: 1.5px solid var(--border);
+    border-radius: 12px;
+    color: var(--text);
+    text-align: center;
+    cursor: pointer;
+    font-size: 0.95rem;
+    font-weight: 600;
+  }
+  .mode-btn.selected {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 1px var(--accent) inset;
+  }
+  .mode-btn .icon { font-size: 1.6rem; display: block; margin-bottom: 6px; }
+  .detected-row {
+    display: flex; align-items: center; justify-content: space-between;
+    font-size: 0.8rem; color: var(--text-dim); margin-top: 6px;
+  }
+
+  /* ---------- Queue ---------- */
+  #queueScreen { justify-content: center; padding: 24px; text-align: center; }
+  .spinner {
+    width: 46px; height: 46px;
+    border: 3px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.9s linear infinite;
+    margin: 0 auto 18px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ---------- Chat screen ---------- */
+  #chatScreen {
+    width: 100%;
+    height: 100vh;
+    height: 100dvh;
+    justify-content: flex-start;
+  }
+  .chat-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 16px;
+    padding-top: calc(12px + env(safe-area-inset-top, 0px));
+    border-bottom: 1px solid var(--border);
+    width: 100%;
+  }
+  .status-pill {
+    font-size: 0.78rem;
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: var(--panel-2);
+    color: var(--text-dim);
+  }
+  .video-stage {
+    position: relative;
+    width: 100%;
+    flex: 1;
+    background: #000;
+    overflow: hidden;
+    min-height: 0;
+  }
+  video {
+    width: 100%; height: 100%;
+    object-fit: cover;
+    background: #050708;
+  }
+  #remoteVideo { width: 100%; height: 100%; }
+  #localVideo {
+    position: absolute;
+    bottom: 14px; right: 14px;
+    width: 28vw; max-width: 140px;
+    aspect-ratio: 3/4;
+    border-radius: 10px;
+    border: 2px solid var(--border);
+    object-fit: cover;
+  }
+  .placeholder-msg {
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--text-dim); font-size: 0.9rem; text-align: center; padding: 20px;
+  }
+
+  .textchat-panel {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    background: var(--panel);
+    border-top: 1px solid var(--border);
+  }
+  #chatScreen.text-only .textchat-panel { flex: 1; min-height: 0; }
+  #chatScreen.video-mode .textchat-panel { height: 30%; }
+
+  .messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 10px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .msg {
+    max-width: 78%;
+    padding: 8px 12px;
+    border-radius: 14px;
+    font-size: 0.88rem;
+    line-height: 1.35;
+    word-wrap: break-word;
+  }
+  .msg.me { align-self: flex-end; background: var(--accent-2); color: #fff; border-bottom-right-radius: 4px; }
+  .msg.them { align-self: flex-start; background: var(--panel-2); border-bottom-left-radius: 4px; }
+  .msg.system { align-self: center; color: var(--text-dim); font-size: 0.78rem; background: none; }
+
+  .composer {
+    display: flex; gap: 8px;
+    padding: 10px 12px;
+    padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+    border-top: 1px solid var(--border);
+  }
+  .composer input {
+    flex: 1;
+    padding: 10px 14px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: var(--panel-2);
+    color: var(--text);
+    font-size: 0.9rem;
+  }
+  .composer button {
+    padding: 0 18px;
+    border: none;
+    border-radius: 999px;
+    background: var(--accent);
+    color: #0b0f14;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  .controls-row {
+    display: flex;
+    gap: 8px;
+    padding: 10px 12px;
+    padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+    border-top: 1px solid var(--border);
+    width: 100%;
+  }
+  .controls-row button {
+    flex: 1;
+    padding: 11px;
+    border-radius: 10px;
+    border: none;
+    font-weight: 700;
+    font-size: 0.85rem;
+    cursor: pointer;
+  }
+  .btn-next { background: var(--accent); color: #0b0f14; }
+  .btn-stop { background: var(--panel-2); color: var(--text); border: 1px solid var(--border) !important; }
+  .btn-report { background: var(--danger); color: #fff; }
+
+  .toast {
+    position: fixed;
+    bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+    left: 50%; transform: translateX(-50%);
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    padding: 10px 18px;
+    border-radius: 999px;
+    font-size: 0.82rem;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.25s;
+    z-index: 50;
+  }
+  .toast.show { opacity: 1; }
+
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<!-- ================= AGE / TERMS GATE ================= -->
+<div class="screen active" id="ageGate">
+  <div class="card">
+    <div class="logo">
+      <div class="logo-mark"></div>
+      <div class="logo-text">Random Connect</div>
+    </div>
+    <h1>Before you enter</h1>
+    <p>Random Connect pairs you with a random person for live text or video chat. No accounts, no chat logs are stored on our servers — everything is in-memory and ends when the chat ends.</p>
+
+    <label for="dobInput">Date of birth</label>
+    <input type="date" id="dobInput" />
+
+    <div class="checkbox-row">
+      <input type="checkbox" id="termsCheck" />
+      <label for="termsCheck" style="margin:0;">I agree to the Terms of Use and understand chats are unmoderated in real time and may contain content not suitable for all audiences.</label>
+    </div>
+
+    <button class="btn" id="enterBtn" disabled>Confirm & Continue</button>
+    <div class="error-text" id="ageError"></div>
+  </div>
+</div>
+
+<!-- ================= LANDING ================= -->
+<div class="screen" id="landing">
+  <div class="card">
+    <div class="logo">
+      <div class="logo-mark"></div>
+      <div class="logo-text">Random Connect</div>
+    </div>
+    <p>Choose how you want to chat and who you'd like to meet.</p>
+
+    <div class="mode-grid">
+      <div class="mode-btn selected" data-mode="video">
+        <span class="icon">🎥</span>Video Chat
+      </div>
+      <div class="mode-btn" data-mode="text">
+        <span class="icon">💬</span>Text Chat
+      </div>
+    </div>
+
+    <label for="countrySelect">Match with someone from</label>
+    <select id="countrySelect"></select>
+    <div class="detected-row">
+      <span id="detectedCountryLabel">Detecting your location…</span>
+    </div>
+
+    <button class="btn" id="startBtn">Start Matching</button>
+    <div class="error-text" id="landingError"></div>
+  </div>
+</div>
+
+<!-- ================= QUEUE ================= -->
+<div class="screen" id="queueScreen">
+  <div class="spinner"></div>
+  <div id="queueLabel" style="font-weight:600;">Looking for someone to connect you with…</div>
+  <div style="color:var(--text-dim); font-size:0.85rem; margin-top:6px;" id="queueSubLabel"></div>
+  <button class="btn btn-secondary" style="max-width:220px; margin-top:24px;" id="cancelQueueBtn">Cancel</button>
+</div>
+
+<!-- ================= CHAT ================= -->
+<div class="screen" id="chatScreen">
+  <div class="chat-header">
+    <div class="logo" style="margin:0;">
+      <div class="logo-mark" style="width:24px;height:24px;"></div>
+      <div class="logo-text" style="font-size:0.95rem;">Random Connect</div>
+    </div>
+    <div class="status-pill" id="statusPill">Connecting…</div>
+  </div>
+
+  <div class="video-stage" id="videoStage">
+    <video id="remoteVideo" autoplay playsinline></video>
+    <video id="localVideo" autoplay playsinline muted></video>
+    <div class="placeholder-msg" id="videoPlaceholder">Waiting for video…</div>
+  </div>
+
+  <div class="textchat-panel">
+    <div class="messages" id="messages"></div>
+    <div class="composer">
+      <input type="text" id="msgInput" placeholder="Say something…" maxlength="500" />
+      <button id="sendBtn">Send</button>
+    </div>
+  </div>
+
+  <div class="controls-row">
+    <button class="btn-next" id="nextBtn">Next ⏭</button>
+    <button class="btn-stop" id="stopBtn">Stop</button>
+    <button class="btn-report" id="reportBtn">Report 🚩</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(function () {
+  "use strict";
+
+  // ---- Config ----
+  // Point this at wherever server.js is running.
+  const SIGNALING_URL = window.location.origin;
+
+  const COUNTRIES = [
+    ["ANY", "🌍 Worldwide / Random"],
+    ["US", "🇺🇸 United States"], ["GB", "🇬🇧 United Kingdom"], ["CA", "🇨🇦 Canada"],
+    ["AU", "🇦🇺 Australia"], ["DE", "🇩🇪 Germany"], ["FR", "🇫🇷 France"],
+    ["JP", "🇯🇵 Japan"], ["KR", "🇰🇷 South Korea"], ["BR", "🇧🇷 Brazil"],
+    ["IN", "🇮🇳 India"], ["PH", "🇵🇭 Philippines"], ["MX", "🇲🇽 Mexico"],
+    ["IT", "🇮🇹 Italy"], ["ES", "🇪🇸 Spain"], ["NL", "🇳🇱 Netherlands"],
+    ["SE", "🇸🇪 Sweden"], ["SG", "🇸🇬 Singapore"], ["ZA", "🇿🇦 South Africa"],
+  ];
+
+  let socket = null;
+  let mode = "video";
+  let detectedCountry = "UNKNOWN";
+  let localStream = null;
+  let pc = null;
+  let inChat = false;
+
+  const RTC_CONFIG = {
+    iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
+  };
+
+  // ---------- Screen helpers ----------
+  function show(id) {
+    document.querySelectorAll(".screen").forEach((s) => s.classList.remove("active"));
+    document.getElementById(id).classList.add("active");
+  }
+  function toast(msg) {
+    const t = document.getElementById("toast");
+    t.textContent = msg;
+    t.classList.add("show");
+    setTimeout(() => t.classList.remove("show"), 2200);
+  }
+
+  // ---------- Age gate ----------
+  const dobInput = document.getElementById("dobInput");
+  const termsCheck = document.getElementById("termsCheck");
+  const enterBtn = document.getElementById("enterBtn");
+  const ageError = document.getElementById("ageError");
+
+  function computeAge(dobStr) {
+    const dob = new Date(dobStr);
+    if (isNaN(dob.getTime())) return null;
+    const today = new Date();
+    let age = today.getFullYear() - dob.getFullYear();
+    const m = today.getMonth() - dob.getMonth();
+    if (m < 0 || (m === 0 && today.getDate() < dob.getDate())) age--;
+    return age;
+  }
+
+  function refreshEnterBtn() {
+    enterBtn.disabled = !(dobInput.value && termsCheck.checked);
+  }
+  dobInput.addEventListener("change", refreshEnterBtn);
+  termsCheck.addEventListener("change", refreshEnterBtn);
+
+  enterBtn.addEventListener("click", () => {
+    const age = computeAge(dobInput.value);
+    if (age === null) {
+      ageError.textContent = "Please enter a valid date of birth.";
+      return;
+    }
+    if (age < 18) {
+      ageError.textContent = "You must be 18 or older to use Random Connect.";
+      return;
+    }
+    ageError.textContent = "";
+    connectSocket();
+    // Nothing about DOB is stored beyond this session's in-memory flag.
+    sessionStorage.setItem("rc_age_ok", "1");
+    show("landing");
+    initLanding();
+  });
+
+  // ---------- Socket setup ----------
+  function connectSocket() {
+    if (socket) return;
+    socket = io(SIGNALING_URL, { transports: ["websocket", "polling"] });
+
+    socket.on("connect", () => {
+      socket.emit("age-verify", { confirmedAdult: true });
+    });
+
+    socket.on("matched", handleMatched);
+    socket.on("partner-disconnected", handlePartnerDisconnected);
+    socket.on("chat-message", (data) => appendMessage(data.text, "them"));
+    socket.on("webrtc-offer", handleRemoteOffer);
+    socket.on("webrtc-answer", handleRemoteAnswer);
+    socket.on("webrtc-ice-candidate", handleRemoteIce);
+    socket.on("report-received", () => toast("Report submitted. Thank you."));
+    socket.on("error-message", (m) => toast(m));
+    socket.on("connect_error", () => {
+      toast("Can't reach signaling server — is server.js running?");
+    });
+  }
+
+  // ---------- Landing ----------
+  const countrySelect = document.getElementById("countrySelect");
+  const detectedLabel = document.getElementById("detectedCountryLabel");
+
+  function initLanding() {
+    if (countrySelect.options.length === 0) {
+      COUNTRIES.forEach(([code, label]) => {
+        const opt = document.createElement("option");
+        opt.value = code;
+        opt.textContent = label;
+        countrySelect.appendChild(opt);
+      });
+      detectCountry();
+    }
+  }
+
+  async function detectCountry() {
+    try {
+      const res = await fetch("https://ipapi.co/json/");
+      const data = await res.json();
+      if (data && data.country_code) {
+        detectedCountry = data.country_code;
+        detectedLabel.textContent =
+          "Detected your location: " + (data.country_name || detectedCountry);
+        return;
+      }
+      throw new Error("no country in response");
+    } catch (e) {
+      detectedCountry = "UNKNOWN";
+      detectedLabel.textContent = "Couldn't auto-detect your location — that's okay.";
+    }
+  }
+
+  document.querySelectorAll(".mode-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll(".mode-btn").forEach((b) => b.classList.remove("selected"));
+      btn.classList.add("selected");
+      mode = btn.dataset.mode;
+    });
+  });
+
+  document.getElementById("startBtn").addEventListener("click", async () => {
+    const wantsCountry = countrySelect.value || "ANY";
+    document.getElementById("landingError").textContent = "";
+
+    if (mode === "video") {
+      try {
+        localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      } catch (e) {
+        document.getElementById("landingError").textContent =
+          "Camera/mic access is required for video chat. Try Text Chat instead, or allow permissions.";
+        return;
+      }
+    }
+
+    show("queueScreen");
+    document.getElementById("queueSubLabel").textContent =
+      wantsCountry === "ANY" ? "Matching worldwide" : "Looking for someone from " + wantsCountry;
+
+    socket.emit("join-queue", {
+      mode,
+      country: detectedCountry,
+      wantsCountry,
+    });
+  });
+
+  document.getElementById("cancelQueueBtn").addEventListener("click", () => {
+    socket.emit("leave-queue");
+    stopLocalStream();
+    show("landing");
+  });
+
+  // ---------- Matching / chat lifecycle ----------
+  function handleMatched({ mode: matchedMode, initiator }) {
+    mode = matchedMode;
+    inChat = true;
+    enterChatScreen();
+
+    if (mode === "video") {
+      setupPeerConnection(initiator);
+    } else {
+      document.getElementById("statusPill").textContent = "Connected — text chat";
+    }
+    appendMessage("You're connected to a stranger. Say hi!", "system");
+  }
+
+  function enterChatScreen() {
+    show("chatScreen");
+    const chatScreen = document.getElementById("chatScreen");
+    const stage = document.getElementById("videoStage");
+    document.getElementById("messages").innerHTML = "";
+
+    if (mode === "video") {
+      chatScreen.classList.add("video-mode");
+      chatScreen.classList.remove("text-only");
+      stage.style.display = "block";
+      document.getElementById("localVideo").srcObject = localStream;
+      document.getElementById("videoPlaceholder").style.display = "flex";
+    } else {
+      chatScreen.classList.add("text-only");
+      chatScreen.classList.remove("video-mode");
+      stage.style.display = "none";
+    }
+    document.getElementById("statusPill").textContent = "Connecting…";
+  }
+
+  function appendMessage(text, who) {
+    const el = document.createElement("div");
+    el.className = "msg " + who;
+    el.textContent = text;
+    const box = document.getElementById("messages");
+    box.appendChild(el);
+    box.scrollTop = box.scrollHeight;
+  }
+
+  document.getElementById("sendBtn").addEventListener("click", sendMsg);
+  document.getElementById("msgInput").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") sendMsg();
+  });
+  function sendMsg() {
+    const input = document.getElementById("msgInput");
+    const text = input.value.trim();
+    if (!text || !inChat) return;
+    socket.emit("chat-message", { text });
+    appendMessage(text, "me");
+    input.value = "";
+  }
+
+  document.getElementById("nextBtn").addEventListener("click", () => {
+    endCurrentChat();
+    requeue();
+  });
+  document.getElementById("stopBtn").addEventListener("click", () => {
+    endCurrentChat();
+    stopLocalStream();
+    show("landing");
+  });
+  document.getElementById("reportBtn").addEventListener("click", () => {
+    const reason = prompt("Briefly describe the issue (optional):") || "unspecified";
+    socket.emit("report-user", { reason });
+    endCurrentChat();
+    show("landing");
+  });
+
+  function requeue() {
+    show("queueScreen");
+    const wantsCountry = countrySelect.value || "ANY";
+    document.getElementById("queueSubLabel").textContent =
+      wantsCountry === "ANY" ? "Matching worldwide" : "Looking for someone from " + wantsCountry;
+    socket.emit("join-queue", { mode, country: detectedCountry, wantsCountry });
+  }
+
+  function handlePartnerDisconnected() {
+    if (!inChat) return;
+    toast("Stranger disconnected.");
+    endCurrentChat(false);
+    requeue();
+  }
+
+  function endCurrentChat(notifyServer = true) {
+    inChat = false;
+    if (notifyServer) socket.emit("next");
+    teardownPeerConnection();
+  }
+
+  function stopLocalStream() {
+    if (localStream) {
+      localStream.getTracks().forEach((t) => t.stop());
+      localStream = null;
+    }
+  }
+
+  // ---------- WebRTC ----------
+  function setupPeerConnection(isInitiator) {
+    teardownPeerConnection();
+    pc = new RTCPeerConnection(RTC_CONFIG);
+
+    if (localStream) {
+      localStream.getTracks().forEach((track) => pc.addTrack(track, localStream));
+    }
+
+    pc.ontrack = (event) => {
+      const remoteVideo = document.getElementById("remoteVideo");
+      remoteVideo.srcObject = event.streams[0];
+      document.getElementById("videoPlaceholder").style.display = "none";
+      document.getElementById("statusPill").textContent = "Connected — video chat";
+    };
+
+    pc.onicecandidate = (event) => {
+      if (event.candidate) {
+        socket.emit("webrtc-ice-candidate", { candidate: event.candidate });
+      }
+    };
+
+    if (isInitiator) {
+      pc.onnegotiationneeded = async () => {
+        try {
+          const offer = await pc.createOffer();
+          await pc.setLocalDescription(offer);
+          socket.emit("webrtc-offer", { sdp: pc.localDescription });
+        } catch (e) { /* ignore */ }
+      };
+    }
+  }
+
+  async function handleRemoteOffer({ sdp }) {
+    if (!pc) setupPeerConnection(false);
+    await pc.setRemoteDescription(new RTCSessionDescription(sdp));
+    const answer = await pc.createAnswer();
+    await pc.setLocalDescription(answer);
+    socket.emit("webrtc-answer", { sdp: pc.localDescription });
+  }
+
+  async function handleRemoteAnswer({ sdp }) {
+    if (!pc) return;
+    await pc.setRemoteDescription(new RTCSessionDescription(sdp));
+  }
+
+  async function handleRemoteIce({ candidate }) {
+    if (!pc) return;
+    try {
+      await pc.addIceCandidate(candidate);
+    } catch (e) { /* ignore */ }
+  }
+
+  function teardownPeerConnection() {
+    if (pc) {
+      pc.close();
+      pc = null;
+    }
+    const remoteVideo = document.getElementById("remoteVideo");
+    if (remoteVideo) remoteVideo.srcObject = null;
+  }
+})();
+</script>
+</body>
+</html>
